@@ -2,3 +2,4 @@ vendor/
 report/
 composer.lock
 sandbox/
+.php_cs.cache
