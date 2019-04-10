@@ -13,8 +13,7 @@ class Indenter {
         ),
         $inline_elements = array('b', 'big', 'i', 'small', 'tt', 'abbr', 'acronym', 'cite', 'code', 'dfn', 'em', 'kbd', 'strong', 'samp', 'var', 'a', 'bdo', 'br', 'img', 'span', 'sub', 'sup'),
         $ignore_elements = array('script','pre','textarea'),
-        $ignore_blade_elements = array('php', 'istrue', 'isfalse', 'isnull', 'isnotnull', 'style', 'script', 'routeis', 'routeisnot', 'instanceof', 'typeof', 'pushonce', 'repeat', 'haserror'),
-        //'foreach',
+        $ignore_blade_elements = array(),
         $temporary_replacements_ignore = array(),
         $temporary_replacements_inline = array();
 
@@ -89,7 +88,7 @@ class Indenter {
             }
         }
 
-        if (preg_match_all('/{{([\s\S]*?)}}/mi', $input, $matches)) {
+        if (preg_match_all('/{{([\s\S].+?)}}/mi', $input, $matches)) {
             $this->temporary_replacements_ignore['{{}}'] = $matches[0];
             foreach ($matches[0] as $i => $match) {
                 $input = str_replace($match, '{{'. ($i + 1) . '}}', $input);
@@ -118,9 +117,11 @@ class Indenter {
         do {
             $indentation_level = $next_line_indentation_level;
 
+            //'php', 'istrue', 'isfalse', 'isnull', 'isnotnull', 'style', 'script', 'routeis', 'routeisnot', 'instanceof', 'typeof', 'pushonce', 'repeat', 'haserror'
+
             $patterns = array(
                 // block tag
-                '/^(@(foreach)(.+)\S@end(foreach))/' => static::MATCH_INDENT_NO,
+                '/^(@(php|foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror)(.+)\r@end(php|foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror))/' => static::MATCH_INDENT_NO,
                 // block tag
                 '/^(<([a-z]+)(?:[^>]*)>(?:[^<]*)<\/(?:\2)>)/' => static::MATCH_INDENT_NO,
                 // DOCTYPE
@@ -172,31 +173,8 @@ class Indenter {
                     if ($indentation_level < 0) {
                         $indentation_level = 0;
                     }
-                    /*$lines = preg_split('#[\n]+#sx', $matches[0], 0, PREG_SPLIT_NO_EMPTY || PREG_SPLIT_DELIM_CAPTURE);
-                    if ($lines && preg_match('/@/', $lines[0])) {
-                        $_m = '';
-                        foreach($lines as $ii => $line) {
-                            $line = str_replace("\t", '', $line);
-                            //$line = preg_replace('/\s{2,}/', ' ', $line);
-                            //$line = preg_replace('/^\s/', '', $line);
-                            $ilevel = $indentation_level;
-                            if ($ii === 0) {
-                                $line = preg_replace('/^\s\S{1,}/', '', $line);
-                                $_m .= str_repeat($this->options['indentation_character'], $ilevel) . $line . PHP_EOL;
-                            } elseif ((count($lines)-1) === $ii) {
-                                $line = preg_replace('/^\s\S{1,}/', '', $line);
-                                $_m .= str_repeat($this->options['indentation_character'], $ilevel) . $line . PHP_EOL;
-                            } else {
-                                $ilevel++;
-                                $line = preg_replace('/^\s\S{1,'. (strlen($this->options['indentation_character']) * $ilevel) .'}/', '', $line);
-                                $_m .= str_repeat($this->options['indentation_character'], $ilevel) . $line . PHP_EOL;
-                            }
-                        }
-                        //var_dump([$pattern, $_m, $lines]);
-                        $output .= $_m;
-                    } else {*/
-                        $output .= (!empty($matches[0]) ? str_repeat($this->options['indentation_character'], $indentation_level) . $matches[0] : NULL ) . PHP_EOL;
-                    //}
+
+                    $output .= (!empty($matches[0]) ? str_repeat($this->options['indentation_character'], $indentation_level) . $matches[0] : NULL ) . PHP_EOL;
                     break;
                 }
             }
@@ -212,12 +190,6 @@ class Indenter {
         }
 
         $output = preg_replace('/(<(\w+)[^>]*>)\s*(<\/\2>)/', '\\1\\3', $output);
-
-        if(isset($this->temporary_replacements_ignore['{{}}'])){
-            foreach ($this->temporary_replacements_ignore['{{}}'] as $i => $original) {
-                $output = str_replace('{{'. ($i + 1) . '}}', $original, $output);
-            }
-        }
 
         if(isset($this->temporary_replacements_ignore['<!---->'])){
             foreach ($this->temporary_replacements_ignore['<!---->'] as $i => $original) {
@@ -243,6 +215,12 @@ class Indenter {
 
         foreach ($this->temporary_replacements_inline as $i => $original) {
             $output = str_replace('ᐃ' . ($i + 1) . 'ᐃ', $original, $output);
+        }
+
+        if(isset($this->temporary_replacements_ignore['{{}}'])){
+            foreach ($this->temporary_replacements_ignore['{{}}'] as $i => $original) {
+                $output = str_replace('{{'. ($i + 1) . '}}', $original, $output);
+            }
         }
 
         return trim($output);
