@@ -13,7 +13,8 @@ class Indenter {
         ),
         $inline_elements = array('b', 'big', 'i', 'small', 'tt', 'abbr', 'acronym', 'cite', 'code', 'dfn', 'em', 'kbd', 'strong', 'samp', 'var', 'a', 'bdo', 'br', 'img', 'span', 'sub', 'sup'),
         $ignore_elements = array('script','pre','textarea'),
-
+        $ignore_blade_elements = array('php', 'istrue', 'isfalse', 'isnull', 'isnotnull', 'style', 'script', 'routeis', 'routeisnot', 'instanceof', 'typeof', 'pushonce', 'repeat', 'haserror'),
+        //'foreach',
         $temporary_replacements_ignore = array(),
         $temporary_replacements_inline = array();
 
@@ -72,6 +73,28 @@ class Indenter {
             }
         }
 
+        foreach ($this->ignore_blade_elements as $key) {
+            if (preg_match_all('/@'.$key.'([\s\S]*?)@end'.$key.'/mi', $input, $matches)) {
+                $this->temporary_replacements_ignore[$key] = $matches[0];
+                foreach ($matches[0] as $i => $match) {
+                    $input = str_replace($match, '@'.$key. ($i + 1) . '@end'.$key, $input);
+                }
+            }
+        }
+
+        if (preg_match_all('/<!--([\s\S]*?)-->/mi', $input, $matches)) {
+            $this->temporary_replacements_ignore['<!---->'] = $matches[0];
+            foreach ($matches[0] as $i => $match) {
+                $input = str_replace($match, '<!--'. ($i + 1) . '-->', $input);
+            }
+        }
+
+        if (preg_match_all('/{{([\s\S]*?)}}/mi', $input, $matches)) {
+            $this->temporary_replacements_ignore['{{}}'] = $matches[0];
+            foreach ($matches[0] as $i => $match) {
+                $input = str_replace($match, '{{'. ($i + 1) . '}}', $input);
+            }
+        }
         // Removing double whitespaces to make the source code easier to read.
         // With exception of <pre>/ CSS white-space changing the default behaviour, double whitespace is meaningless in HTML output.
         // This reason alone is sufficient not to use Dindent in production.
@@ -96,6 +119,8 @@ class Indenter {
             $indentation_level = $next_line_indentation_level;
 
             $patterns = array(
+                // block tag
+                '/^(@(foreach)(.+)\S@end(foreach))/' => static::MATCH_INDENT_NO,
                 // block tag
                 '/^(<([a-z]+)(?:[^>]*)>(?:[^<]*)<\/(?:\2)>)/' => static::MATCH_INDENT_NO,
                 // DOCTYPE
@@ -129,6 +154,9 @@ class Indenter {
                     $subject = mb_substr($subject, mb_strlen($matches[0]));
 
                     if ($rule === static::MATCH_DISCARD) {
+                        if (empty($matches[0])) {
+                            $output .= PHP_EOL;
+                        }
                         break;
                     }
 
@@ -144,9 +172,31 @@ class Indenter {
                     if ($indentation_level < 0) {
                         $indentation_level = 0;
                     }
-
-                    $output .= str_repeat($this->options['indentation_character'], $indentation_level) . $matches[0] . "\n";
-
+                    /*$lines = preg_split('#[\n]+#sx', $matches[0], 0, PREG_SPLIT_NO_EMPTY || PREG_SPLIT_DELIM_CAPTURE);
+                    if ($lines && preg_match('/@/', $lines[0])) {
+                        $_m = '';
+                        foreach($lines as $ii => $line) {
+                            $line = str_replace("\t", '', $line);
+                            //$line = preg_replace('/\s{2,}/', ' ', $line);
+                            //$line = preg_replace('/^\s/', '', $line);
+                            $ilevel = $indentation_level;
+                            if ($ii === 0) {
+                                $line = preg_replace('/^\s\S{1,}/', '', $line);
+                                $_m .= str_repeat($this->options['indentation_character'], $ilevel) . $line . PHP_EOL;
+                            } elseif ((count($lines)-1) === $ii) {
+                                $line = preg_replace('/^\s\S{1,}/', '', $line);
+                                $_m .= str_repeat($this->options['indentation_character'], $ilevel) . $line . PHP_EOL;
+                            } else {
+                                $ilevel++;
+                                $line = preg_replace('/^\s\S{1,'. (strlen($this->options['indentation_character']) * $ilevel) .'}/', '', $line);
+                                $_m .= str_repeat($this->options['indentation_character'], $ilevel) . $line . PHP_EOL;
+                            }
+                        }
+                        //var_dump([$pattern, $_m, $lines]);
+                        $output .= $_m;
+                    } else {*/
+                        $output .= (!empty($matches[0]) ? str_repeat($this->options['indentation_character'], $indentation_level) . $matches[0] : NULL ) . PHP_EOL;
+                    //}
                     break;
                 }
             }
@@ -162,6 +212,26 @@ class Indenter {
         }
 
         $output = preg_replace('/(<(\w+)[^>]*>)\s*(<\/\2>)/', '\\1\\3', $output);
+
+        if(isset($this->temporary_replacements_ignore['{{}}'])){
+            foreach ($this->temporary_replacements_ignore['{{}}'] as $i => $original) {
+                $output = str_replace('{{'. ($i + 1) . '}}', $original, $output);
+            }
+        }
+
+        if(isset($this->temporary_replacements_ignore['<!---->'])){
+            foreach ($this->temporary_replacements_ignore['<!---->'] as $i => $original) {
+                $output = str_replace('<!--'. ($i + 1) . '-->', $original, $output);
+            }
+        }
+
+        foreach (array_reverse($this->ignore_blade_elements) as $key) {
+            if(isset($this->temporary_replacements_ignore[$key])){
+                foreach ($this->temporary_replacements_ignore[$key] as $i => $original) {
+                    $output = str_replace('@'.$key . ($i + 1) . '@end'.$key, $original, $output);
+                }
+            }
+        }
 
         foreach ($this->ignore_elements as $key) {
             if(isset($this->temporary_replacements_ignore[$key])){
