@@ -13,7 +13,7 @@ class Indenter {
         ),
         $inline_elements = array('b', 'big', 'i', 'small', 'tt', 'abbr', 'acronym', 'cite', 'code', 'dfn', 'em', 'kbd', 'strong', 'samp', 'var', 'a', 'bdo', 'br', 'img', 'span', 'sub', 'sup'),
         $ignore_elements = array('script','pre','textarea'),
-        $ignore_blade_elements = array(),
+        $ignore_blade_elements = array('php'),
         $temporary_replacements_ignore = array(),
         $temporary_replacements_inline = array();
 
@@ -60,6 +60,9 @@ class Indenter {
      * @return string Indented HTML.
      */
     public function indent ($input) {
+        if (empty($input)) {
+            return $input;
+        }
         $this->log = array();
 
         // Dindent does not indent. Instead, it temporary removes it from the code, indents the input, and restores the script body.
@@ -120,8 +123,10 @@ class Indenter {
             //'php', 'istrue', 'isfalse', 'isnull', 'isnotnull', 'style', 'script', 'routeis', 'routeisnot', 'instanceof', 'typeof', 'pushonce', 'repeat', 'haserror'
 
             $patterns = array(
-                // block tag
-                '/^(@(php|foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror)(.+)\r@end(php|foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror))/' => static::MATCH_INDENT_NO,
+                // blade tags
+                '/^@(foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror)(?:[\)$]+)(?:[^@]*)@end(foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror)/' => static::MATCH_INDENT_NO,
+                '/^@(foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror)(?:[\)$]+)/' => static::MATCH_INDENT_NO,
+                '/^@end(foreach|if|istrue|isfalse|isnull|isnotnull|style|script|routeis|routeisnot|instanceof|typeof|pushonce|repeat|haserror)/' => static::MATCH_INDENT_NO,
                 // block tag
                 '/^(<([a-z]+)(?:[^>]*)>(?:[^<]*)<\/(?:\2)>)/' => static::MATCH_INDENT_NO,
                 // DOCTYPE
@@ -145,19 +150,19 @@ class Indenter {
 
             foreach ($patterns as $pattern => $rule) {
                 if ($match = preg_match($pattern, $subject, $matches)) {
+                    if (empty($matches[0])) {
+                        $output .= PHP_EOL;
+                    }
                     $this->log[] = array(
                         'rule' => $rules[$rule],
                         'pattern' => $pattern,
                         'subject' => $subject,
-                        'match' => $matches[0]
+                        'match' => empty($matches[0]) ? NULL : $matches[0]
                     );
 
                     $subject = mb_substr($subject, mb_strlen($matches[0]));
 
                     if ($rule === static::MATCH_DISCARD) {
-                        if (empty($matches[0])) {
-                            $output .= PHP_EOL;
-                        }
                         break;
                     }
 
@@ -186,14 +191,17 @@ class Indenter {
         }
 
         if ($interpreted_input !== $input) {
-            throw new Exception\RuntimeException('Did not reproduce the exact input.');
+            print $interpreted_input;
+            throw new Exception\RuntimeException('Did not reproduce the exact input. ');
         }
 
         $output = preg_replace('/(<(\w+)[^>]*>)\s*(<\/\2>)/', '\\1\\3', $output);
 
-        if(isset($this->temporary_replacements_ignore['<!---->'])){
-            foreach ($this->temporary_replacements_ignore['<!---->'] as $i => $original) {
-                $output = str_replace('<!--'. ($i + 1) . '-->', $original, $output);
+        foreach ($this->ignore_elements as $key) {
+            if(isset($this->temporary_replacements_ignore[$key])){
+                foreach ($this->temporary_replacements_ignore[$key] as $i => $original) {
+                 $output = str_replace('<'.$key.'>' . ($i + 1) . '</'.$key.'>', $original, $output);
+                }
             }
         }
 
@@ -205,14 +213,6 @@ class Indenter {
             }
         }
 
-        foreach ($this->ignore_elements as $key) {
-            if(isset($this->temporary_replacements_ignore[$key])){
-                foreach ($this->temporary_replacements_ignore[$key] as $i => $original) {
-                 $output = str_replace('<'.$key.'>' . ($i + 1) . '</'.$key.'>', $original, $output);
-                }
-            }
-        }
-
         foreach ($this->temporary_replacements_inline as $i => $original) {
             $output = str_replace('ᐃ' . ($i + 1) . 'ᐃ', $original, $output);
         }
@@ -220,6 +220,12 @@ class Indenter {
         if(isset($this->temporary_replacements_ignore['{{}}'])){
             foreach ($this->temporary_replacements_ignore['{{}}'] as $i => $original) {
                 $output = str_replace('{{'. ($i + 1) . '}}', $original, $output);
+            }
+        }
+
+        if(isset($this->temporary_replacements_ignore['<!---->'])){
+            foreach ($this->temporary_replacements_ignore['<!---->'] as $i => $original) {
+                $output = str_replace('<!--'. ($i + 1) . '-->', $original, $output);
             }
         }
 
